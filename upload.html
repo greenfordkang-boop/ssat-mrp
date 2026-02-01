@@ -5,429 +5,270 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MRP 시스템 - 파일 업로드</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
     <style>
         .gradient-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
         .upload-zone { border: 2px dashed #d1d5db; transition: all 0.2s; }
-        .upload-zone:hover, .upload-zone.drag-over { border-color: #6366f1; background-color: #eef2ff; }
-        .file-card { animation: slideIn 0.3s ease-out; }
-        @keyframes slideIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
+        .upload-zone:hover { border-color: #6366f1; background-color: #eef2ff; }
+        .upload-zone.dragover { border-color: #6366f1; background-color: #eef2ff; }
     </style>
 </head>
 <body class="min-h-screen bg-gray-50">
-    <div id="root"></div>
-
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
-    <script type="text/babel">
-        const { useState, useEffect, useRef } = React;
-
-        // ===== Supabase 설정 =====
-        const SUPABASE_URL = 'https://vnhjfbcufmbbhwevzunc.supabase.co';
-        const SUPABASE_ANON_KEY = 'sb_publishable_HZaiacrqOyKPgzUC7RRpXQ_ff3gQp0D';
-
-        let supabase = null;
-        try {
-            if (SUPABASE_URL !== 'YOUR_SUPABASE_URL') {
-                supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-            }
-        } catch (e) {
-            console.error('Supabase 초기화 오류:', e);
-        }
-
-        // 아이콘
-        const Icons = {
-            Upload: () => <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>,
-            File: () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>,
-            Check: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>,
-            X: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>,
-            Logout: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>,
-            Trash: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>,
-            Download: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>,
-            Table: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>,
-            ArrowRight: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
-        };
-
-        // 파일 유형 정의
-        const FILE_TYPES = {
-            bom: { name: 'BOM (자재명세서)', icon: '📋', color: 'blue', required: ['모품번', '자품번', '레벨'] },
-            inventory: { name: '재고 현황', icon: '📦', color: 'green', required: ['품번', '재고수량'] },
-            sales: { name: '영업계획', icon: '📊', color: 'purple', required: ['품번', '계획수량'] }
-        };
-
-        function App() {
-            const [user, setUser] = useState(null);
-            const [files, setFiles] = useState({ bom: null, inventory: null, sales: null });
-            const [fileData, setFileData] = useState({ bom: null, inventory: null, sales: null });
-            const [previewData, setPreviewData] = useState(null);
-            const [dragOver, setDragOver] = useState(null);
-            const [processing, setProcessing] = useState(false);
-
-            // 사용자 세션 확인
-            useEffect(() => {
-                const checkAuth = async () => {
-                    // 데모 모드 체크
-                    const demoMode = localStorage.getItem('mrp_demo_mode');
-                    if (demoMode === 'true') {
-                        const demoUser = JSON.parse(localStorage.getItem('mrp_user') || '{}');
-                        setUser(demoUser);
-                        loadSavedFiles();
-                        return;
-                    }
-
-                    if (!supabase) {
-                        window.location.href = 'login.html';
-                        return;
-                    }
-
-                    const { data: { session } } = await supabase.auth.getSession();
-                    if (!session) {
-                        window.location.href = 'login.html';
-                        return;
-                    }
-                    setUser(session.user);
-                    loadSavedFiles();
-                };
-                checkAuth();
-            }, []);
-
-            // 저장된 파일 데이터 로드
-            const loadSavedFiles = () => {
-                const savedBom = localStorage.getItem('mrp_bom_data');
-                const savedInventory = localStorage.getItem('mrp_inventory_data');
-                const savedSales = localStorage.getItem('mrp_sales_data');
-
-                if (savedBom) setFileData(prev => ({ ...prev, bom: JSON.parse(savedBom) }));
-                if (savedInventory) setFileData(prev => ({ ...prev, inventory: JSON.parse(savedInventory) }));
-                if (savedSales) setFileData(prev => ({ ...prev, sales: JSON.parse(savedSales) }));
-            };
-
-            // 로그아웃
-            const handleLogout = async () => {
-                localStorage.removeItem('mrp_demo_mode');
-                localStorage.removeItem('mrp_user');
-                if (supabase) {
-                    await supabase.auth.signOut();
-                }
-                window.location.href = 'login.html';
-            };
-
-            // 파일 드롭 처리
-            const handleDrop = async (e, type) => {
-                e.preventDefault();
-                setDragOver(null);
-
-                const file = e.dataTransfer?.files[0] || e.target.files[0];
-                if (!file) return;
-
-                if (!file.name.match(/\.(xlsx|xls|csv)$/i)) {
-                    alert('Excel 또는 CSV 파일만 업로드할 수 있습니다.');
-                    return;
-                }
-
-                setProcessing(true);
-                try {
-                    const data = await parseExcelFile(file);
-                    setFiles(prev => ({ ...prev, [type]: file }));
-                    setFileData(prev => ({ ...prev, [type]: { name: file.name, rows: data.length, data: data } }));
-
-                    // 로컬 스토리지에 저장
-                    localStorage.setItem(`mrp_${type}_data`, JSON.stringify({ name: file.name, rows: data.length, data: data }));
-                } catch (error) {
-                    alert('파일 처리 중 오류가 발생했습니다: ' + error.message);
-                } finally {
-                    setProcessing(false);
-                }
-            };
-
-            // Excel 파일 파싱
-            const parseExcelFile = (file) => {
-                return new Promise((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        try {
-                            const workbook = XLSX.read(e.target.result, { type: 'array' });
-                            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                            const data = XLSX.utils.sheet_to_json(firstSheet);
-                            resolve(data);
-                        } catch (error) {
-                            reject(error);
-                        }
-                    };
-                    reader.onerror = reject;
-                    reader.readAsArrayBuffer(file);
-                });
-            };
-
-            // 파일 삭제
-            const handleDelete = (type) => {
-                setFiles(prev => ({ ...prev, [type]: null }));
-                setFileData(prev => ({ ...prev, [type]: null }));
-                localStorage.removeItem(`mrp_${type}_data`);
-            };
-
-            // 미리보기
-            const handlePreview = (type) => {
-                if (fileData[type]?.data) {
-                    setPreviewData({ type, data: fileData[type].data.slice(0, 100) });
-                }
-            };
-
-            // 엑셀 다운로드
-            const handleDownload = (type) => {
-                if (!fileData[type]?.data) return;
-                const ws = XLSX.utils.json_to_sheet(fileData[type].data);
-                const wb = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(wb, ws, 'Data');
-                XLSX.writeFile(wb, `${type}_data.xlsx`);
-            };
-
-            // MRP 분석 페이지로 이동
-            const goToMRP = () => {
-                if (!fileData.bom || !fileData.inventory || !fileData.sales) {
-                    alert('모든 파일(BOM, 재고, 영업계획)을 먼저 업로드해주세요.');
-                    return;
-                }
-                window.location.href = 'mrp.html';
-            };
-
-            // 파일 업로드 카드 컴포넌트
-            const FileUploadCard = ({ type }) => {
-                const fileRef = useRef(null);
-                const info = FILE_TYPES[type];
-                const data = fileData[type];
-
-                return (
-                    <div className={`bg-white rounded-xl shadow-sm overflow-hidden border-2 ${data ? `border-${info.color}-200` : 'border-transparent'}`}>
-                        <div className={`px-4 py-3 bg-${info.color}-50 border-b flex items-center justify-between`}>
-                            <div className="flex items-center gap-2">
-                                <span className="text-2xl">{info.icon}</span>
-                                <div>
-                                    <h3 className="font-semibold text-gray-800">{info.name}</h3>
-                                    <p className="text-xs text-gray-500">필수 컬럼: {info.required.join(', ')}</p>
-                                </div>
-                            </div>
-                            {data && (
-                                <span className={`px-2 py-1 bg-${info.color}-100 text-${info.color}-700 rounded-full text-xs font-medium`}>
-                                    업로드 완료
-                                </span>
-                            )}
-                        </div>
-
-                        <div className="p-4">
-                            {!data ? (
-                                <div
-                                    className={`upload-zone rounded-lg p-8 text-center cursor-pointer ${dragOver === type ? 'drag-over' : ''}`}
-                                    onDragOver={(e) => { e.preventDefault(); setDragOver(type); }}
-                                    onDragLeave={() => setDragOver(null)}
-                                    onDrop={(e) => handleDrop(e, type)}
-                                    onClick={() => fileRef.current?.click()}
-                                >
-                                    <input
-                                        ref={fileRef}
-                                        type="file"
-                                        accept=".xlsx,.xls,.csv"
-                                        className="hidden"
-                                        onChange={(e) => handleDrop(e, type)}
-                                    />
-                                    <div className="text-gray-400 mb-2 flex justify-center">
-                                        <Icons.Upload />
-                                    </div>
-                                    <p className="text-gray-600 font-medium">파일을 드래그하거나 클릭하여 업로드</p>
-                                    <p className="text-gray-400 text-sm mt-1">Excel (.xlsx, .xls) 또는 CSV 파일</p>
-                                </div>
-                            ) : (
-                                <div className="file-card">
-                                    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                        <div className="flex items-center gap-3">
-                                            <div className={`p-2 bg-${info.color}-100 rounded-lg text-${info.color}-600`}>
-                                                <Icons.File />
-                                            </div>
-                                            <div>
-                                                <p className="font-medium text-gray-800">{data.name}</p>
-                                                <p className="text-sm text-gray-500">{data.rows.toLocaleString()} 행</p>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-1">
-                                            <button
-                                                onClick={() => handlePreview(type)}
-                                                className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                                title="미리보기"
-                                            >
-                                                <Icons.Table />
-                                            </button>
-                                            <button
-                                                onClick={() => handleDownload(type)}
-                                                className="p-2 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                                                title="다운로드"
-                                            >
-                                                <Icons.Download />
-                                            </button>
-                                            <button
-                                                onClick={() => handleDelete(type)}
-                                                className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                title="삭제"
-                                            >
-                                                <Icons.Trash />
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                );
-            };
-
-            if (!user) {
-                return (
-                    <div className="min-h-screen flex items-center justify-center">
-                        <div className="text-center">
-                            <div className="animate-spin w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full mx-auto mb-4"></div>
-                            <p className="text-gray-600">로딩 중...</p>
-                        </div>
-                    </div>
-                );
-            }
-
-            return (
-                <div className="min-h-screen bg-gray-50">
-                    {/* 헤더 */}
-                    <header className="gradient-header text-white shadow-lg">
-                        <div className="max-w-6xl mx-auto px-6 py-4">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-4">
-                                    <span className="text-3xl">📦</span>
-                                    <div>
-                                        <h1 className="text-xl font-bold">MRP 시스템</h1>
-                                        <p className="text-white/80 text-sm">파일 업로드</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-4">
-                                    <nav className="flex gap-2">
-                                        <a href="upload.html" className="px-4 py-2 bg-white/20 rounded-lg text-sm font-medium">파일 업로드</a>
-                                        <a href="mrp.html" className="px-4 py-2 hover:bg-white/10 rounded-lg text-sm font-medium transition-colors">MRP 분석</a>
-                                    </nav>
-                                    <div className="h-6 w-px bg-white/30"></div>
-                                    <span className="text-sm">{user.name || user.email}</span>
-                                    <button onClick={handleLogout} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
-                                        <Icons.Logout />
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </header>
-
-                    {/* 메인 콘텐츠 */}
-                    <main className="max-w-6xl mx-auto px-6 py-8">
-                        {/* 진행 상태 */}
-                        <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
-                            <h2 className="text-lg font-semibold mb-4">업로드 진행 상태</h2>
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-4">
-                                    {Object.entries(FILE_TYPES).map(([type, info], idx) => (
-                                        <React.Fragment key={type}>
-                                            <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${
-                                                fileData[type] ? `bg-${info.color}-100 text-${info.color}-700` : 'bg-gray-100 text-gray-500'
-                                            }`}>
-                                                {fileData[type] ? <Icons.Check /> : <span className="w-5 h-5 rounded-full border-2 border-current"></span>}
-                                                <span className="font-medium">{info.name}</span>
-                                            </div>
-                                            {idx < 2 && <div className="w-8 h-px bg-gray-300"></div>}
-                                        </React.Fragment>
-                                    ))}
-                                </div>
-                                <button
-                                    onClick={goToMRP}
-                                    disabled={!fileData.bom || !fileData.inventory || !fileData.sales}
-                                    className="px-6 py-3 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                                >
-                                    MRP 분석 시작 <Icons.ArrowRight />
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* 파일 업로드 카드 */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <FileUploadCard type="bom" />
-                            <FileUploadCard type="inventory" />
-                            <FileUploadCard type="sales" />
-                        </div>
-
-                        {/* 안내 */}
-                        <div className="mt-6 bg-blue-50 rounded-xl p-6">
-                            <h3 className="font-semibold text-blue-800 mb-2">📌 파일 업로드 안내</h3>
-                            <ul className="text-sm text-blue-700 space-y-1">
-                                <li>• <strong>BOM 파일</strong>: 모품번, 자품번, 레벨, 소요량 등 자재명세 정보</li>
-                                <li>• <strong>재고 파일</strong>: 품번, 재고수량, 품명 등 현재 재고 정보</li>
-                                <li>• <strong>영업계획 파일</strong>: 품번, 계획수량, 고객사 등 영업 계획 정보</li>
-                                <li>• 업로드된 데이터는 브라우저에 저장되며, 로그아웃 시에도 유지됩니다.</li>
-                            </ul>
-                        </div>
-                    </main>
-
-                    {/* 미리보기 모달 */}
-                    {previewData && (
-                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setPreviewData(null)}>
-                            <div className="bg-white rounded-xl max-w-5xl w-full max-h-[80vh] overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
-                                <div className="flex items-center justify-between px-6 py-4 border-b">
-                                    <h3 className="font-semibold text-lg">
-                                        {FILE_TYPES[previewData.type].icon} {FILE_TYPES[previewData.type].name} 미리보기
-                                        <span className="text-sm text-gray-500 ml-2">(처음 100행)</span>
-                                    </h3>
-                                    <button onClick={() => setPreviewData(null)} className="p-2 hover:bg-gray-100 rounded-lg">
-                                        <Icons.X />
-                                    </button>
-                                </div>
-                                <div className="overflow-auto max-h-[60vh]">
-                                    <table className="w-full text-sm">
-                                        <thead className="bg-gray-50 sticky top-0">
-                                            <tr>
-                                                {previewData.data[0] && Object.keys(previewData.data[0]).map(key => (
-                                                    <th key={key} className="px-4 py-3 text-left font-medium text-gray-700 whitespace-nowrap">{key}</th>
-                                                ))}
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {previewData.data.map((row, idx) => (
-                                                <tr key={idx} className="border-b hover:bg-gray-50">
-                                                    {Object.values(row).map((val, i) => (
-                                                        <td key={i} className="px-4 py-2 whitespace-nowrap">{String(val ?? '')}</td>
-                                                    ))}
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                                <div className="px-6 py-4 border-t bg-gray-50 flex justify-end">
-                                    <button
-                                        onClick={() => handleDownload(previewData.type)}
-                                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
-                                    >
-                                        <Icons.Download /> Excel 다운로드
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* 처리 중 오버레이 */}
-                    {processing && (
-                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                            <div className="bg-white rounded-xl p-8 text-center">
-                                <div className="animate-spin w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full mx-auto mb-4"></div>
-                                <p className="text-gray-700 font-medium">파일 처리 중...</p>
-                            </div>
-                        </div>
-                    )}
+    <header class="gradient-header text-white p-4 shadow-lg">
+        <div class="max-w-6xl mx-auto flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <span class="text-2xl">📦</span>
+                <div>
+                    <h1 class="text-xl font-bold">MRP 시스템</h1>
+                    <p class="text-sm text-white/80">파일 업로드</p>
                 </div>
-            );
+            </div>
+            <div class="flex gap-2">
+                <a href="mrp.html" class="px-4 py-2 bg-white/20 rounded-lg hover:bg-white/30">MRP 분석</a>
+                <button onclick="handleLogout()" class="px-4 py-2 bg-red-500/80 rounded-lg hover:bg-red-600">로그아웃</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto p-6">
+        <div id="loading" class="hidden text-center py-4">
+            <div class="inline-flex items-center gap-2 text-indigo-600">
+                <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span>데이터 처리 중...</span>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <div class="bg-white rounded-xl shadow p-6">
+                <div class="flex items-center gap-2 mb-4">
+                    <span class="text-2xl">📋</span>
+                    <h3 class="font-bold">BOM (자재명세서)</h3>
+                </div>
+                <div id="bom-zone" class="upload-zone rounded-lg p-8 text-center cursor-pointer"
+                     onclick="document.getElementById('bom-input').click()"
+                     ondrop="handleDrop(event,'bom')" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
+                    <p class="text-gray-500">클릭하거나 파일을 드래그하세요</p>
+                    <p class="text-xs text-gray-400 mt-2">필수: 모품번, 자품번, 레벨</p>
+                </div>
+                <input type="file" id="bom-input" class="hidden" accept=".xlsx,.xls,.csv" onchange="handleFileSelect(event,'bom')">
+                <div id="bom-info" class="mt-4 hidden"></div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow p-6">
+                <div class="flex items-center gap-2 mb-4">
+                    <span class="text-2xl">📦</span>
+                    <h3 class="font-bold">재고 현황</h3>
+                </div>
+                <div id="inventory-zone" class="upload-zone rounded-lg p-8 text-center cursor-pointer"
+                     onclick="document.getElementById('inv-input').click()"
+                     ondrop="handleDrop(event,'inventory')" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
+                    <p class="text-gray-500">클릭하거나 파일을 드래그하세요</p>
+                    <p class="text-xs text-gray-400 mt-2">필수: 품번, 재고수량</p>
+                </div>
+                <input type="file" id="inv-input" class="hidden" accept=".xlsx,.xls,.csv" onchange="handleFileSelect(event,'inventory')">
+                <div id="inventory-info" class="mt-4 hidden"></div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow p-6">
+                <div class="flex items-center gap-2 mb-4">
+                    <span class="text-2xl">📊</span>
+                    <h3 class="font-bold">영업계획</h3>
+                </div>
+                <div id="sales-zone" class="upload-zone rounded-lg p-8 text-center cursor-pointer"
+                     onclick="document.getElementById('sales-input').click()"
+                     ondrop="handleDrop(event,'sales')" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
+                    <p class="text-gray-500">클릭하거나 파일을 드래그하세요</p>
+                    <p class="text-xs text-gray-400 mt-2">필수: 품번, 계획수량</p>
+                </div>
+                <input type="file" id="sales-input" class="hidden" accept=".xlsx,.xls,.csv" onchange="handleFileSelect(event,'sales')">
+                <div id="sales-info" class="mt-4 hidden"></div>
+            </div>
+        </div>
+
+        <div class="text-center">
+            <button onclick="goToMRP()" class="px-8 py-3 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 shadow-lg">
+                MRP 분석 시작 →
+            </button>
+        </div>
+    </main>
+
+    <script>
+        // Supabase 설정
+        const SUPABASE_URL = 'https://vnhjfbcufmbbhwevzunc.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZuaGpmYmN1Zm1iYmh3ZXZ6dW5jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5MzE2NDEsImV4cCI6MjA4NTUwNzY0MX0.ZZFMYH172ByFDOpBNH_4ehsDNoKMqmLIvdhiCv_27Zo';
+
+        let supabaseClient = null;
+        const uploadedData = { bom: null, inventory: null, sales: null };
+
+        // Supabase 초기화
+        function initSupabase() {
+            if (window.supabase && typeof window.supabase.createClient === 'function') {
+                supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                console.log('Supabase 초기화 완료');
+                loadSavedData();
+                return true;
+            }
+            return false;
         }
 
-        ReactDOM.render(<App />, document.getElementById('root'));
+        // 페이지 로드 시 Supabase 초기화
+        if (!initSupabase()) {
+            const interval = setInterval(() => {
+                if (initSupabase()) clearInterval(interval);
+            }, 100);
+            setTimeout(() => clearInterval(interval), 5000);
+        }
+
+        // Auth check
+        if (!localStorage.getItem('mrp_demo_mode')) {
+            window.location.href = 'login.html';
+        }
+
+        // 저장된 데이터 불러오기
+        async function loadSavedData() {
+            if (!supabaseClient) return;
+
+            showLoading(true);
+            try {
+                for (const type of ['bom', 'inventory', 'sales']) {
+                    const { data, error } = await supabaseClient
+                        .from('mrp_data')
+                        .select('*')
+                        .eq('data_type', type)
+                        .order('updated_at', { ascending: false })
+                        .limit(1);
+
+                    if (!error && data && data.length > 0) {
+                        uploadedData[type] = data[0].data;
+                        showFileInfo(type, data[0].data.name || type, data[0].data.rows || data[0].data.data?.length || 0);
+                    }
+                }
+            } catch (e) {
+                console.error('데이터 로드 오류:', e);
+            }
+            showLoading(false);
+        }
+
+        function showLoading(show) {
+            document.getElementById('loading').classList.toggle('hidden', !show);
+        }
+
+        function handleLogout() {
+            localStorage.clear();
+            window.location.href = 'login.html';
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.currentTarget.classList.add('dragover');
+        }
+
+        function handleDragLeave(e) {
+            e.currentTarget.classList.remove('dragover');
+        }
+
+        function handleDrop(e, type) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('dragover');
+            const file = e.dataTransfer?.files[0];
+            if (file) processFile(file, type);
+        }
+
+        function handleFileSelect(e, type) {
+            const file = e.target.files[0];
+            if (file) processFile(file, type);
+        }
+
+        async function processFile(file, type) {
+            if (!file.name.match(/\.(xlsx|xls|csv)$/i)) {
+                alert('Excel/CSV 파일만 가능합니다.');
+                return;
+            }
+
+            showLoading(true);
+            const reader = new FileReader();
+
+            reader.onload = async function(ev) {
+                try {
+                    const wb = XLSX.read(ev.target.result, { type: 'array' });
+                    const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+
+                    const saveData = {
+                        name: file.name,
+                        rows: data.length,
+                        data: data
+                    };
+
+                    // Supabase에 저장
+                    if (supabaseClient) {
+                        // 기존 데이터 삭제 후 새로 저장
+                        await supabaseClient
+                            .from('mrp_data')
+                            .delete()
+                            .eq('data_type', type);
+
+                        const { error } = await supabaseClient
+                            .from('mrp_data')
+                            .insert({
+                                data_type: type,
+                                data: saveData
+                            });
+
+                        if (error) {
+                            console.error('Supabase 저장 오류:', error);
+                            alert('데이터 저장 중 오류가 발생했습니다: ' + error.message);
+                        } else {
+                            uploadedData[type] = saveData;
+                            showFileInfo(type, file.name, data.length);
+                        }
+                    } else {
+                        alert('Supabase 연결이 필요합니다.');
+                    }
+                } catch (err) {
+                    alert('파일 처리 오류: ' + err.message);
+                }
+                showLoading(false);
+            };
+
+            reader.readAsArrayBuffer(file);
+        }
+
+        function showFileInfo(type, name, rows) {
+            const el = document.getElementById(type + '-info');
+            el.innerHTML = `
+                <div class="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                    <span class="text-green-700">✓ ${name} (${rows}행)</span>
+                    <button onclick="deleteFile('${type}')" class="text-red-500 hover:text-red-700">삭제</button>
+                </div>
+            `;
+            el.classList.remove('hidden');
+        }
+
+        async function deleteFile(type) {
+            showLoading(true);
+            if (supabaseClient) {
+                await supabaseClient
+                    .from('mrp_data')
+                    .delete()
+                    .eq('data_type', type);
+            }
+            uploadedData[type] = null;
+            document.getElementById(type + '-info').innerHTML = '';
+            document.getElementById(type + '-info').classList.add('hidden');
+            showLoading(false);
+        }
+
+        function goToMRP() {
+            if (!uploadedData.bom || !uploadedData.inventory || !uploadedData.sales) {
+                alert('모든 파일(BOM, 재고, 영업계획)을 업로드해주세요.');
+                return;
+            }
+            window.location.href = 'mrp.html';
+        }
     </script>
 </body>
 </html>
