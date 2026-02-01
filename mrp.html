@@ -21,10 +21,7 @@
         <div class="max-w-7xl mx-auto flex justify-between items-center">
             <div class="flex items-center gap-3">
                 <span class="text-2xl">📦</span>
-                <div>
-                    <h1 class="text-xl font-bold">MRP 시스템</h1>
-                    <p class="text-sm text-white/80">자재소요계획 분석</p>
-                </div>
+                <div><h1 class="text-xl font-bold">MRP 시스템</h1><p class="text-sm text-white/80">자재소요계획 분석</p></div>
             </div>
             <div class="flex gap-2">
                 <a href="upload.html" class="px-4 py-2 bg-white/20 rounded-lg hover:bg-white/30">파일 업로드</a>
@@ -32,42 +29,26 @@
             </div>
         </div>
     </header>
-
     <main class="max-w-7xl mx-auto p-6">
         <div id="loading" class="text-center py-8">
             <div class="inline-flex items-center gap-2 text-indigo-600">
-                <svg class="animate-spin w-6 h-6" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
+                <svg class="animate-spin w-6 h-6" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                 <span>데이터 로딩 중...</span>
             </div>
         </div>
-
         <div id="controls" class="mb-6 flex gap-4 hidden">
-            <button onclick="runMRP()" class="px-6 py-3 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 shadow">
-                MRP 분석 실행
-            </button>
-            <button onclick="exportExcel()" class="px-6 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 shadow">
-                엑셀 다운로드
-            </button>
+            <button onclick="runMRP()" class="px-6 py-3 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 shadow">MRP 분석 실행</button>
+            <button onclick="exportExcel()" class="px-6 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 shadow">엑셀 다운로드</button>
         </div>
-
         <div id="results" class="space-y-6"></div>
     </main>
-
     <script>
-        // Supabase 설정
         const SUPABASE_URL = 'https://vnhjfbcufmbbhwevzunc.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZuaGpmYmN1Zm1iYmh3ZXZ6dW5jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5MzE2NDEsImV4cCI6MjA4NTUwNzY0MX0.ZZFMYH172ByFDOpBNH_4ehsDNoKMqmLIvdhiCv_27Zo';
+        let supabaseClient = null, analysisResults = [], loadedData = { bom: [], inventory: [], sales: [] };
 
-        let supabaseClient = null;
-        let analysisResults = [];
-        let loadedData = { bom: [], inventory: [], sales: [] };
-
-        // Supabase 초기화
         function initSupabase() {
-            if (window.supabase && typeof window.supabase.createClient === 'function') {
+            if (window.supabase?.createClient) {
                 supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
                 console.log('Supabase 초기화 완료');
                 loadDataFromSupabase();
@@ -75,218 +56,111 @@
             }
             return false;
         }
-
-        // 페이지 로드 시 Supabase 초기화
         if (!initSupabase()) {
-            const interval = setInterval(() => {
-                if (initSupabase()) clearInterval(interval);
-            }, 100);
-            setTimeout(() => {
-                clearInterval(interval);
-                showLoading(false);
-                alert('Supabase 연결에 실패했습니다.');
-            }, 5000);
+            const i = setInterval(() => { if (initSupabase()) clearInterval(i); }, 100);
+            setTimeout(() => { clearInterval(i); showLoading(false); alert('Supabase 연결 실패'); }, 5000);
         }
+        if (!localStorage.getItem('mrp_demo_mode')) window.location.href = 'login.html';
+        function handleLogout() { localStorage.clear(); window.location.href = 'login.html'; }
+        function showLoading(show) { document.getElementById('loading').classList.toggle('hidden', !show); document.getElementById('controls').classList.toggle('hidden', show); }
 
-        // Auth check
-        if (!localStorage.getItem('mrp_demo_mode')) {
-            window.location.href = 'login.html';
-        }
-
-        function handleLogout() {
-            localStorage.clear();
-            window.location.href = 'login.html';
-        }
-
-        function showLoading(show) {
-            document.getElementById('loading').classList.toggle('hidden', !show);
-            document.getElementById('controls').classList.toggle('hidden', show);
-        }
-
-        // Supabase에서 데이터 불러오기
         async function loadDataFromSupabase() {
             if (!supabaseClient) return;
-
-            try {
-                for (const type of ['bom', 'inventory', 'sales']) {
-                    const { data, error } = await supabaseClient
-                        .from('mrp_data')
-                        .select('*')
-                        .eq('data_type', type)
-                        .order('updated_at', { ascending: false })
-                        .limit(1);
-
-                    if (!error && data && data.length > 0) {
-                        loadedData[type] = data[0].data?.data || [];
-                    }
-                }
-
-                showLoading(false);
-
-                // 데이터 체크
-                if (!loadedData.bom.length || !loadedData.inventory.length || !loadedData.sales.length) {
-                    document.getElementById('results').innerHTML = `
-                        <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-6 text-center">
-                            <p class="text-yellow-800 mb-4">데이터가 없습니다. 파일을 먼저 업로드하세요.</p>
-                            <a href="upload.html" class="inline-block px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
-                                파일 업로드하기 →
-                            </a>
-                        </div>
-                    `;
-                } else {
-                    // 자동으로 MRP 분석 실행
-                    runMRP();
-                }
-            } catch (e) {
-                console.error('데이터 로드 오류:', e);
-                showLoading(false);
+            for (const type of ['bom', 'inventory', 'sales']) {
+                const { data } = await supabaseClient.from('mrp_data').select('*').eq('data_type', type).order('updated_at', { ascending: false }).limit(1);
+                if (data?.[0]) loadedData[type] = data[0].data?.data || [];
             }
+            showLoading(false);
+            if (!loadedData.bom.length || !loadedData.inventory.length || !loadedData.sales.length) {
+                document.getElementById('results').innerHTML = `<div class="bg-yellow-50 border border-yellow-200 rounded-xl p-6 text-center"><p class="text-yellow-800 mb-4">데이터가 없습니다.</p><a href="upload.html" class="inline-block px-6 py-2 bg-indigo-600 text-white rounded-lg">파일 업로드 →</a></div>`;
+            } else runMRP();
         }
 
         function runMRP() {
-            const bomData = loadedData.bom;
-            const invData = loadedData.inventory;
-            const salesData = loadedData.sales;
-
-            if (!bomData.length || !invData.length || !salesData.length) {
-                alert('데이터가 없습니다. 파일을 먼저 업로드하세요.');
-                window.location.href = 'upload.html';
-                return;
-            }
-
+            const { bom: bomData, inventory: invData, sales: salesData } = loadedData;
+            if (!bomData.length || !invData.length || !salesData.length) { alert('데이터 없음'); return; }
+            
             // Build inventory map
             const inventory = {};
-            invData.forEach(row => {
-                const pn = row['품번'] || row['partNumber'] || Object.values(row)[0];
-                const qty = parseFloat(row['재고수량'] || row['inventory'] || Object.values(row)[1]) || 0;
-                inventory[pn] = qty;
+            invData.forEach(row => { 
+                const pn = row['품번'] || Object.values(row)[0]; 
+                inventory[pn] = parseFloat(row['재고수량'] || Object.values(row)[1]) || 0; 
             });
-
+            
             // Build BOM tree
             const bom = {};
             bomData.forEach(row => {
-                const parent = row['모품번'] || row['parentPN'] || Object.values(row)[0];
-                const child = row['자품번'] || row['childPN'] || Object.values(row)[1];
-                const qty = parseFloat(row['소요량'] || row['quantity'] || Object.values(row)[3]) || 1;
-                if (!bom[parent]) bom[parent] = [];
-                bom[parent].push({ child, qty });
+                const parent = row['모품번'] || Object.values(row)[0];
+                const child = row['자품번'] || Object.values(row)[1];
+                const qty = parseFloat(row['소요량'] || Object.values(row)[3]) || 1;
+                // 자기 자신 참조 방지
+                if (parent && child && parent !== child) {
+                    if (!bom[parent]) bom[parent] = [];
+                    bom[parent].push({ child, qty });
+                }
             });
-
-            // Calculate requirements
+            
             analysisResults = [];
             salesData.forEach(sale => {
-                const product = sale['품번'] || sale['partNumber'] || Object.values(sale)[0];
-                const planQty = parseFloat(sale['계획수량'] || sale['매출수량'] || sale['planQty'] || Object.values(sale)[1]) || 0;
-
-                const requirements = calculateRequirements(product, planQty, bom, inventory, 0);
+                const product = sale['품번'] || Object.values(sale)[0];
+                const planQty = parseFloat(sale['계획수량'] || sale['매출수량'] || Object.values(sale)[1]) || 0;
+                
+                // 방문 추적으로 순환 참조 방지
+                const visited = new Set();
+                const requirements = calculateRequirements(product, planQty, bom, inventory, 0, visited);
+                
                 requirements.forEach(req => {
                     const existing = analysisResults.find(r => r.product === product && r.material === req.material);
-                    if (existing) {
-                        existing.required += req.required;
-                        existing.shortage = Math.max(0, existing.required - existing.stock);
+                    if (existing) { 
+                        existing.required += req.required; 
+                        existing.shortage = Math.max(0, existing.required - existing.stock); 
                     } else {
-                        analysisResults.push({
-                            product,
-                            planQty,
-                            material: req.material,
-                            level: req.level,
-                            required: req.required,
-                            stock: inventory[req.material] || 0,
-                            shortage: Math.max(0, req.required - (inventory[req.material] || 0))
+                        analysisResults.push({ 
+                            product, planQty, 
+                            material: req.material, 
+                            level: req.level, 
+                            required: req.required, 
+                            stock: inventory[req.material] || 0, 
+                            shortage: Math.max(0, req.required - (inventory[req.material] || 0)) 
                         });
                     }
                 });
             });
-
             displayResults();
         }
-
-        function calculateRequirements(pn, qty, bom, inventory, level) {
+        
+        function calculateRequirements(pn, qty, bom, inv, level, visited) {
             const results = [];
+            // 최대 깊이 제한 및 순환 참조 방지
+            if (level > 20 || visited.has(pn)) return results;
+            visited.add(pn);
+            
             if (bom[pn]) {
-                bom[pn].forEach(item => {
-                    const required = qty * item.qty;
-                    results.push({ material: item.child, required, level: level + 1 });
-                    results.push(...calculateRequirements(item.child, required, bom, inventory, level + 1));
+                bom[pn].forEach(item => { 
+                    results.push({ material: item.child, required: qty * item.qty, level: level + 1 }); 
+                    results.push(...calculateRequirements(item.child, qty * item.qty, bom, inv, level + 1, new Set(visited))); 
                 });
             }
             return results;
         }
-
+        
         function displayResults() {
-            const container = document.getElementById('results');
-
-            if (!analysisResults.length) {
-                container.innerHTML = '<p class="text-gray-500">분석 결과가 없습니다.</p>';
-                return;
-            }
-
+            if (!analysisResults.length) { document.getElementById('results').innerHTML = '<p class="text-gray-500">분석 결과 없음</p>'; return; }
             const shortages = analysisResults.filter(r => r.shortage > 0);
-
-            container.innerHTML = `
-                <div class="bg-white rounded-xl shadow p-6">
-                    <h2 class="text-xl font-bold mb-4">📊 분석 요약</h2>
-                    <div class="grid grid-cols-3 gap-4 mb-6">
-                        <div class="bg-blue-50 p-4 rounded-lg">
-                            <p class="text-sm text-blue-600">총 자재</p>
-                            <p class="text-2xl font-bold text-blue-700">${analysisResults.length}건</p>
-                        </div>
-                        <div class="bg-red-50 p-4 rounded-lg">
-                            <p class="text-sm text-red-600">부족 자재</p>
-                            <p class="text-2xl font-bold text-red-700">${shortages.length}건</p>
-                        </div>
-                        <div class="bg-green-50 p-4 rounded-lg">
-                            <p class="text-sm text-green-600">정상 자재</p>
-                            <p class="text-2xl font-bold text-green-700">${analysisResults.length - shortages.length}건</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="bg-white rounded-xl shadow p-6">
-                    <h2 class="text-xl font-bold mb-4">📋 상세 분석 결과</h2>
-                    <div class="overflow-x-auto">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>제품</th>
-                                    <th>계획수량</th>
-                                    <th>자재</th>
-                                    <th>레벨</th>
-                                    <th>소요량</th>
-                                    <th>재고</th>
-                                    <th>부족량</th>
-                                    <th>상태</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${analysisResults.map(r => `
-                                    <tr class="${r.shortage > 0 ? 'shortage' : 'ok'}">
-                                        <td>${r.product}</td>
-                                        <td>${r.planQty}</td>
-                                        <td>${r.material}</td>
-                                        <td>L${r.level}</td>
-                                        <td>${r.required.toLocaleString()}</td>
-                                        <td>${r.stock.toLocaleString()}</td>
-                                        <td>${r.shortage.toLocaleString()}</td>
-                                        <td>${r.shortage > 0 ? '⚠️ 부족' : '✅ 정상'}</td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            `;
+            document.getElementById('results').innerHTML = `
+                <div class="bg-white rounded-xl shadow p-6"><h2 class="text-xl font-bold mb-4">📊 분석 요약</h2>
+                <div class="grid grid-cols-3 gap-4"><div class="bg-blue-50 p-4 rounded-lg"><p class="text-sm text-blue-600">총 자재</p><p class="text-2xl font-bold text-blue-700">${analysisResults.length}건</p></div>
+                <div class="bg-red-50 p-4 rounded-lg"><p class="text-sm text-red-600">부족 자재</p><p class="text-2xl font-bold text-red-700">${shortages.length}건</p></div>
+                <div class="bg-green-50 p-4 rounded-lg"><p class="text-sm text-green-600">정상 자재</p><p class="text-2xl font-bold text-green-700">${analysisResults.length - shortages.length}건</p></div></div></div>
+                <div class="bg-white rounded-xl shadow p-6"><h2 class="text-xl font-bold mb-4">📋 상세 결과</h2>
+                <div class="overflow-x-auto"><table><thead><tr><th>제품</th><th>계획</th><th>자재</th><th>레벨</th><th>소요량</th><th>재고</th><th>부족량</th><th>상태</th></tr></thead>
+                <tbody>${analysisResults.map(r => `<tr class="${r.shortage > 0 ? 'shortage' : 'ok'}"><td>${r.product}</td><td>${r.planQty}</td><td>${r.material}</td><td>L${r.level}</td><td>${r.required.toLocaleString()}</td><td>${r.stock.toLocaleString()}</td><td>${r.shortage.toLocaleString()}</td><td>${r.shortage > 0 ? '⚠️ 부족' : '✅ 정상'}</td></tr>`).join('')}</tbody></table></div></div>`;
         }
-
+        
         function exportExcel() {
-            if (!analysisResults.length) {
-                alert('먼저 MRP 분석을 실행하세요.');
-                return;
-            }
-
-            const ws = XLSX.utils.json_to_sheet(analysisResults);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, 'MRP분석결과');
+            if (!analysisResults.length) return alert('먼저 분석 실행');
+            const ws = XLSX.utils.json_to_sheet(analysisResults), wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'MRP결과');
             XLSX.writeFile(wb, 'MRP_분석결과.xlsx');
         }
     </script>
