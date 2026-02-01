@@ -1,4 +1,3 @@
-```html
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -17,15 +16,22 @@
 </head>
 <body class="min-h-screen gradient-bg flex items-center justify-center p-4">
     <div id="root"></div>
+
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
     <script type="text/babel">
         const { useState, useEffect } = React;
+
+        // ===== Supabase 설정 (여기에 본인의 URL과 KEY 입력) =====
         const SUPABASE_URL = 'https://vnhjfbcufmbbhwevzunc.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZuaGpmYmN1Zm1iYmh3ZXZ6dW5jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5MzE2NDEsImV4cCI6MjA4NTUwNzY0MX0.ZZFMYH172ByFDOpBNH_4ehsDNoKMqmLIvdhiCv_27Zo';
+
+        // Supabase 클라이언트 초기화 - SDK 로딩 대기 포함
         let supabase = null;
         let supabaseReady = false;
+
         const initSupabase = () => {
             try {
                 if (SUPABASE_URL !== 'YOUR_SUPABASE_URL' && SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY') {
@@ -41,89 +47,155 @@
             }
             return false;
         };
+
+        // 첫 시도
         initSupabase();
+
+        // 아이콘 컴포넌트
         const Icons = {
+            User: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>,
             Mail: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>,
             Lock: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>,
+            Building: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>,
             Check: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>,
             Alert: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>,
             Spinner: () => <svg className="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
         };
+
         function App() {
             const [mode, setMode] = useState('login');
             const [loading, setLoading] = useState(false);
             const [message, setMessage] = useState({ type: '', text: '' });
-            const [formData, setFormData] = useState({ email: '', password: '', confirmPassword: '', name: '', company: '' });
+            const [formData, setFormData] = useState({
+                email: '', password: '', confirmPassword: '', name: '', company: ''
+            });
             const [isSupabaseReady, setIsSupabaseReady] = useState(supabaseReady);
+
             useEffect(() => {
+                // Supabase SDK 로딩 대기 및 재시도
                 if (!supabaseReady) {
                     const checkInterval = setInterval(() => {
-                        if (initSupabase()) { clearInterval(checkInterval); setIsSupabaseReady(true); }
+                        if (initSupabase()) {
+                            clearInterval(checkInterval);
+                            setIsSupabaseReady(true);
+                        }
                     }, 100);
-                    const timeout = setTimeout(() => { clearInterval(checkInterval); console.log('Supabase SDK 로딩 타임아웃'); }, 5000);
-                    return () => { clearInterval(checkInterval); clearTimeout(timeout); };
+                    // 5초 후 타임아웃
+                    const timeout = setTimeout(() => {
+                        clearInterval(checkInterval);
+                        console.log('Supabase SDK 로딩 타임아웃');
+                    }, 5000);
+                    return () => {
+                        clearInterval(checkInterval);
+                        clearTimeout(timeout);
+                    };
                 }
             }, []);
+
             useEffect(() => {
                 const checkSession = async () => {
                     if (!supabase) return;
                     try {
                         const { data: { session } } = await supabase.auth.getSession();
                         if (session) window.location.href = 'mrp.html';
-                    } catch (e) { console.error('세션 체크 오류:', e); }
+                    } catch (e) {
+                        console.error('세션 체크 오류:', e);
+                    }
                 };
-                if (isSupabaseReady) checkSession();
+                if (isSupabaseReady) {
+                    checkSession();
+                }
             }, [isSupabaseReady]);
-            const handleInputChange = (e) => { setFormData({ ...formData, [e.target.name]: e.target.value }); setMessage({ type: '', text: '' }); };
+
+            const handleInputChange = (e) => {
+                setFormData({ ...formData, [e.target.name]: e.target.value });
+                setMessage({ type: '', text: '' });
+            };
+
             const handleLogin = async (e) => {
                 e.preventDefault();
-                if (!supabase) { setMessage({ type: 'error', text: 'Supabase가 설정되지 않았습니다.' }); return; }
+                if (!supabase) {
+                    setMessage({ type: 'error', text: 'Supabase가 설정되지 않았습니다.' });
+                    return;
+                }
                 setLoading(true);
                 try {
-                    const { error } = await supabase.auth.signInWithPassword({ email: formData.email, password: formData.password });
+                    const { error } = await supabase.auth.signInWithPassword({
+                        email: formData.email,
+                        password: formData.password
+                    });
                     if (error) throw error;
                     setMessage({ type: 'success', text: '로그인 성공!' });
                     setTimeout(() => { window.location.href = 'mrp.html'; }, 1000);
-                } catch (error) { setMessage({ type: 'error', text: error.message }); }
-                finally { setLoading(false); }
+                } catch (error) {
+                    setMessage({ type: 'error', text: error.message });
+                } finally {
+                    setLoading(false);
+                }
             };
+
             const handleRegister = async (e) => {
                 e.preventDefault();
-                if (formData.password !== formData.confirmPassword) { setMessage({ type: 'error', text: '비밀번호가 일치하지 않습니다.' }); return; }
-                if (formData.password.length < 6) { setMessage({ type: 'error', text: '비밀번호는 6자 이상이어야 합니다.' }); return; }
-                if (!supabase) { setMessage({ type: 'error', text: 'Supabase가 설정되지 않았습니다.' }); return; }
+                if (formData.password !== formData.confirmPassword) {
+                    setMessage({ type: 'error', text: '비밀번호가 일치하지 않습니다.' });
+                    return;
+                }
+                if (formData.password.length < 6) {
+                    setMessage({ type: 'error', text: '비밀번호는 6자 이상이어야 합니다.' });
+                    return;
+                }
+                if (!supabase) {
+                    setMessage({ type: 'error', text: 'Supabase가 설정되지 않았습니다.' });
+                    return;
+                }
                 setLoading(true);
                 try {
-                    const { error } = await supabase.auth.signUp({ email: formData.email, password: formData.password, options: { data: { name: formData.name, company: formData.company } } });
+                    const { error } = await supabase.auth.signUp({
+                        email: formData.email,
+                        password: formData.password,
+                        options: {
+                            data: { name: formData.name, company: formData.company }
+                        }
+                    });
                     if (error) throw error;
                     setMessage({ type: 'success', text: '회원가입 완료! 이메일을 확인해주세요.' });
                     setMode('login');
-                } catch (error) { setMessage({ type: 'error', text: error.message }); }
-                finally { setLoading(false); }
+                } catch (error) {
+                    setMessage({ type: 'error', text: error.message });
+                } finally {
+                    setLoading(false);
+                }
             };
+
             const handleDemoMode = () => {
                 localStorage.setItem('mrp_demo_mode', 'true');
                 localStorage.setItem('mrp_user', JSON.stringify({ name: '데모 사용자', email: 'demo@example.com' }));
                 window.location.href = 'mrp.html';
             };
+
             return (
                 <div className="w-full max-w-md">
                     <div className="text-center mb-8">
-                        <div className="inline-flex items-center justify-center w-16 h-16 bg-white rounded-2xl shadow-lg mb-4"><span className="text-3xl">📦</span></div>
+                        <div className="inline-flex items-center justify-center w-16 h-16 bg-white rounded-2xl shadow-lg mb-4">
+                            <span className="text-3xl">📦</span>
+                        </div>
                         <h1 className="text-3xl font-bold text-white mb-2">MRP 시스템</h1>
                         <p className="text-white/80">자재소요계획 분석 시스템</p>
                     </div>
+
                     <div className="bg-white rounded-2xl card-shadow p-8">
                         <div className="flex mb-6 bg-gray-100 rounded-lg p-1">
                             <button onClick={() => setMode('login')} className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${mode === 'login' ? 'bg-white shadow text-indigo-600' : 'text-gray-600'}`}>로그인</button>
                             <button onClick={() => setMode('register')} className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${mode === 'register' ? 'bg-white shadow text-indigo-600' : 'text-gray-600'}`}>회원가입</button>
                         </div>
+
                         {message.text && (
                             <div className={`mb-4 p-3 rounded-lg flex items-center gap-2 fade-in ${message.type === 'error' ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
                                 {message.type === 'error' ? <Icons.Alert /> : <Icons.Check />}
                                 <span className="text-sm">{message.text}</span>
                             </div>
                         )}
+
                         {mode === 'login' && (
                             <form onSubmit={handleLogin} className="space-y-4">
                                 <div>
@@ -145,6 +217,7 @@
                                 </button>
                             </form>
                         )}
+
                         {mode === 'register' && (
                             <form onSubmit={handleRegister} className="space-y-4">
                                 <div className="grid grid-cols-2 gap-4">
@@ -174,16 +247,30 @@
                                 </button>
                             </form>
                         )}
+
                         <div className="relative my-6">
                             <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200"></div></div>
                             <div className="relative flex justify-center text-sm"><span className="px-2 bg-white text-gray-500">또는</span></div>
                         </div>
+
                         <button onClick={handleDemoMode} className="w-full py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 flex items-center justify-center gap-2 transition">
                             <span>🎮</span> 데모 모드로 체험하기
                         </button>
+
                         {!isSupabaseReady && SUPABASE_URL !== 'YOUR_SUPABASE_URL' && (
                             <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                                <p className="text-sm text-blue-800 flex items-center gap-2"><Icons.Spinner /> Supabase 연결 중...</p>
+                                <p className="text-sm text-blue-800 flex items-center gap-2">
+                                    <Icons.Spinner /> Supabase 연결 중...
+                                </p>
+                            </div>
+                        )}
+
+                        {!supabase && isSupabaseReady && (
+                            <div className="mt-4 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                                <p className="text-sm text-amber-800">
+                                    <strong>⚠️ Supabase 미설정</strong><br/>
+                                    login.html에서 SUPABASE_URL과 KEY를 설정하세요.
+                                </p>
                             </div>
                         )}
                     </div>
@@ -191,8 +278,8 @@
                 </div>
             );
         }
+
         ReactDOM.render(<App />, document.getElementById('root'));
     </script>
 </body>
 </html>
-```
