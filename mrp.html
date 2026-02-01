@@ -58,11 +58,15 @@
         }
         if (!initSupabase()) {
             const i = setInterval(() => { if (initSupabase()) clearInterval(i); }, 100);
-            setTimeout(() => { clearInterval(i); showLoading(false); alert('Supabase 연결 실패'); }, 5000);
+            setTimeout(() => { clearInterval(i); showLoading(false); }, 5000);
         }
         if (!localStorage.getItem('mrp_demo_mode')) window.location.href = 'login.html';
+        
         function handleLogout() { localStorage.clear(); window.location.href = 'login.html'; }
-        function showLoading(show) { document.getElementById('loading').classList.toggle('hidden', !show); document.getElementById('controls').classList.toggle('hidden', show); }
+        function showLoading(show) { 
+            document.getElementById('loading').classList.toggle('hidden', !show); 
+            document.getElementById('controls').classList.toggle('hidden', show); 
+        }
 
         async function loadDataFromSupabase() {
             if (!supabaseClient) return;
@@ -72,13 +76,14 @@
             }
             showLoading(false);
             if (!loadedData.bom.length || !loadedData.inventory.length || !loadedData.sales.length) {
-                document.getElementById('results').innerHTML = `<div class="bg-yellow-50 border border-yellow-200 rounded-xl p-6 text-center"><p class="text-yellow-800 mb-4">데이터가 없습니다.</p><a href="upload.html" class="inline-block px-6 py-2 bg-indigo-600 text-white rounded-lg">파일 업로드 →</a></div>`;
-            } else runMRP();
+                document.getElementById('results').innerHTML = '<div class="bg-yellow-50 border border-yellow-200 rounded-xl p-6 text-center"><p class="text-yellow-800 mb-4">데이터가 없습니다.</p><a href="upload.html" class="px-6 py-2 bg-indigo-600 text-white rounded-lg">파일 업로드 →</a></div>';
+            } else {
+                runMRP();
+            }
         }
 
         function runMRP() {
             const { bom: bomData, inventory: invData, sales: salesData } = loadedData;
-            if (!bomData.length || !invData.length || !salesData.length) { alert('데이터 없음'); return; }
             
             // Build inventory map
             const inventory = {};
@@ -87,79 +92,81 @@
                 inventory[pn] = parseFloat(row['재고수량'] || Object.values(row)[1]) || 0; 
             });
             
-            // Build BOM tree
+            // Build BOM (1레벨만 - 직접 자재만)
             const bom = {};
             bomData.forEach(row => {
                 const parent = row['모품번'] || Object.values(row)[0];
                 const child = row['자품번'] || Object.values(row)[1];
                 const qty = parseFloat(row['소요량'] || Object.values(row)[3]) || 1;
-                // 자기 자신 참조 방지
-                if (parent && child && parent !== child) {
+                const level = parseInt(row['레벨'] || Object.values(row)[2]) || 1;
+                
+                if (parent && child && parent !== child && level === 1) {
                     if (!bom[parent]) bom[parent] = [];
                     bom[parent].push({ child, qty });
                 }
             });
             
+            // Calculate requirements (1레벨만)
             analysisResults = [];
             salesData.forEach(sale => {
                 const product = sale['품번'] || Object.values(sale)[0];
                 const planQty = parseFloat(sale['계획수량'] || sale['매출수량'] || Object.values(sale)[1]) || 0;
                 
-                // 방문 추적으로 순환 참조 방지
-                const visited = new Set();
-                const requirements = calculateRequirements(product, planQty, bom, inventory, 0, visited);
-                
-                requirements.forEach(req => {
-                    const existing = analysisResults.find(r => r.product === product && r.material === req.material);
-                    if (existing) { 
-                        existing.required += req.required; 
-                        existing.shortage = Math.max(0, existing.required - existing.stock); 
-                    } else {
-                        analysisResults.push({ 
-                            product, planQty, 
-                            material: req.material, 
-                            level: req.level, 
-                            required: req.required, 
-                            stock: inventory[req.material] || 0, 
-                            shortage: Math.max(0, req.required - (inventory[req.material] || 0)) 
+                if (bom[product]) {
+                    bom[product].forEach(item => {
+                        const required = planQty * item.qty;
+                        const stock = inventory[item.child] || 0;
+                        analysisResults.push({
+                            product,
+                            planQty,
+                            material: item.child,
+                            level: 1,
+                            required,
+                            stock,
+                            shortage: Math.max(0, required - stock)
                         });
-                    }
-                });
+                    });
+                }
             });
+            
             displayResults();
         }
         
-        function calculateRequirements(pn, qty, bom, inv, level, visited) {
-            const results = [];
-            // 최대 깊이 제한 및 순환 참조 방지
-            if (level > 20 || visited.has(pn)) return results;
-            visited.add(pn);
-            
-            if (bom[pn]) {
-                bom[pn].forEach(item => { 
-                    results.push({ material: item.child, required: qty * item.qty, level: level + 1 }); 
-                    results.push(...calculateRequirements(item.child, qty * item.qty, bom, inv, level + 1, new Set(visited))); 
-                });
-            }
-            return results;
-        }
-        
         function displayResults() {
-            if (!analysisResults.length) { document.getElementById('results').innerHTML = '<p class="text-gray-500">분석 결과 없음</p>'; return; }
+            const container = document.getElementById('results');
+            if (!analysisResults.length) { 
+                container.innerHTML = '<p class="text-gray-500 text-center py-8">분석 결과가 없습니다. BOM에 해당 제품이 없을 수 있습니다.</p>'; 
+                return; 
+            }
             const shortages = analysisResults.filter(r => r.shortage > 0);
-            document.getElementById('results').innerHTML = `
-                <div class="bg-white rounded-xl shadow p-6"><h2 class="text-xl font-bold mb-4">📊 분석 요약</h2>
-                <div class="grid grid-cols-3 gap-4"><div class="bg-blue-50 p-4 rounded-lg"><p class="text-sm text-blue-600">총 자재</p><p class="text-2xl font-bold text-blue-700">${analysisResults.length}건</p></div>
-                <div class="bg-red-50 p-4 rounded-lg"><p class="text-sm text-red-600">부족 자재</p><p class="text-2xl font-bold text-red-700">${shortages.length}건</p></div>
-                <div class="bg-green-50 p-4 rounded-lg"><p class="text-sm text-green-600">정상 자재</p><p class="text-2xl font-bold text-green-700">${analysisResults.length - shortages.length}건</p></div></div></div>
-                <div class="bg-white rounded-xl shadow p-6"><h2 class="text-xl font-bold mb-4">📋 상세 결과</h2>
-                <div class="overflow-x-auto"><table><thead><tr><th>제품</th><th>계획</th><th>자재</th><th>레벨</th><th>소요량</th><th>재고</th><th>부족량</th><th>상태</th></tr></thead>
-                <tbody>${analysisResults.map(r => `<tr class="${r.shortage > 0 ? 'shortage' : 'ok'}"><td>${r.product}</td><td>${r.planQty}</td><td>${r.material}</td><td>L${r.level}</td><td>${r.required.toLocaleString()}</td><td>${r.stock.toLocaleString()}</td><td>${r.shortage.toLocaleString()}</td><td>${r.shortage > 0 ? '⚠️ 부족' : '✅ 정상'}</td></tr>`).join('')}</tbody></table></div></div>`;
+            container.innerHTML = `
+                <div class="bg-white rounded-xl shadow p-6">
+                    <h2 class="text-xl font-bold mb-4">📊 분석 요약</h2>
+                    <div class="grid grid-cols-3 gap-4">
+                        <div class="bg-blue-50 p-4 rounded-lg"><p class="text-sm text-blue-600">총 자재</p><p class="text-2xl font-bold text-blue-700">${analysisResults.length}건</p></div>
+                        <div class="bg-red-50 p-4 rounded-lg"><p class="text-sm text-red-600">부족 자재</p><p class="text-2xl font-bold text-red-700">${shortages.length}건</p></div>
+                        <div class="bg-green-50 p-4 rounded-lg"><p class="text-sm text-green-600">정상 자재</p><p class="text-2xl font-bold text-green-700">${analysisResults.length - shortages.length}건</p></div>
+                    </div>
+                </div>
+                <div class="bg-white rounded-xl shadow p-6">
+                    <h2 class="text-xl font-bold mb-4">📋 상세 결과</h2>
+                    <div class="overflow-x-auto">
+                        <table>
+                            <thead><tr><th>제품</th><th>계획수량</th><th>자재</th><th>소요량</th><th>재고</th><th>부족량</th><th>상태</th></tr></thead>
+                            <tbody>${analysisResults.map(r => `<tr class="${r.shortage > 0 ? 'shortage' : 'ok'}">
+                                <td>${r.product}</td><td>${r.planQty.toLocaleString()}</td><td>${r.material}</td>
+                                <td>${r.required.toLocaleString()}</td><td>${r.stock.toLocaleString()}</td><td>${r.shortage.toLocaleString()}</td>
+                                <td>${r.shortage > 0 ? '⚠️ 부족' : '✅ 정상'}</td></tr>`).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>`;
         }
         
         function exportExcel() {
-            if (!analysisResults.length) return alert('먼저 분석 실행');
-            const ws = XLSX.utils.json_to_sheet(analysisResults), wb = XLSX.utils.book_new();
+            if (!analysisResults.length) return alert('분석 결과가 없습니다.');
+            const ws = XLSX.utils.json_to_sheet(analysisResults);
+            const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, 'MRP결과');
             XLSX.writeFile(wb, 'MRP_분석결과.xlsx');
         }
