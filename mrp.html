@@ -176,7 +176,7 @@
             analysisResults = [];
             salesData.forEach(sale => {
                 const product = sale['품번'] || sale['partNumber'] || Object.values(sale)[0];
-                const planQty = parseFloat(sale['계획수량'] || sale['planQty'] || Object.values(sale)[1]) || 0;
+                const planQty = parseFloat(sale['계획수량'] || sale['매출수량'] || sale['planQty'] || Object.values(sale)[1]) || 0;
 
                 const requirements = calculateRequirements(product, planQty, bom, inventory, 0);
                 requirements.forEach(req => {
