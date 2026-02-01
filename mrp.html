@@ -32,7 +32,6 @@
             </div>
         </div>
     </header>
-
     <main class="max-w-7xl mx-auto p-6">
         <div id="loading" class="text-center py-8">
             <div class="inline-flex items-center gap-2 text-indigo-600">
@@ -43,7 +42,6 @@
                 <span>데이터 로딩 중...</span>
             </div>
         </div>
-
         <div id="controls" class="mb-6 flex gap-4 hidden">
             <button onclick="runMRP()" class="px-6 py-3 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 shadow">
                 MRP 분석 실행
@@ -52,20 +50,14 @@
                 엑셀 다운로드
             </button>
         </div>
-
         <div id="results" class="space-y-6"></div>
     </main>
-
     <script>
-        // Supabase 설정
         const SUPABASE_URL = 'https://vnhjfbcufmbbhwevzunc.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZuaGpmYmN1Zm1iYmh3ZXZ6dW5jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5MzE2NDEsImV4cCI6MjA4NTUwNzY0MX0.ZZFMYH172ByFDOpBNH_4ehsDNoKMqmLIvdhiCv_27Zo';
-
         let supabaseClient = null;
         let analysisResults = [];
         let loadedData = { bom: [], inventory: [], sales: [] };
-
-        // Supabase 초기화
         function initSupabase() {
             if (window.supabase && typeof window.supabase.createClient === 'function') {
                 supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -75,8 +67,6 @@
             }
             return false;
         }
-
-        // 페이지 로드 시 Supabase 초기화
         if (!initSupabase()) {
             const interval = setInterval(() => {
                 if (initSupabase()) clearInterval(interval);
@@ -87,26 +77,19 @@
                 alert('Supabase 연결에 실패했습니다.');
             }, 5000);
         }
-
-        // Auth check
         if (!localStorage.getItem('mrp_demo_mode')) {
             window.location.href = 'login.html';
         }
-
         function handleLogout() {
             localStorage.clear();
             window.location.href = 'login.html';
         }
-
         function showLoading(show) {
             document.getElementById('loading').classList.toggle('hidden', !show);
             document.getElementById('controls').classList.toggle('hidden', show);
         }
-
-        // Supabase에서 데이터 불러오기
         async function loadDataFromSupabase() {
             if (!supabaseClient) return;
-
             try {
                 for (const type of ['bom', 'inventory', 'sales']) {
                     const { data, error } = await supabaseClient
@@ -115,15 +98,11 @@
                         .eq('data_type', type)
                         .order('updated_at', { ascending: false })
                         .limit(1);
-
                     if (!error && data && data.length > 0) {
                         loadedData[type] = data[0].data?.data || [];
                     }
                 }
-
                 showLoading(false);
-
-                // 데이터 체크
                 if (!loadedData.bom.length || !loadedData.inventory.length || !loadedData.sales.length) {
                     document.getElementById('results').innerHTML = `
                         <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-6 text-center">
@@ -134,7 +113,6 @@
                         </div>
                     `;
                 } else {
-                    // 자동으로 MRP 분석 실행
                     runMRP();
                 }
             } catch (e) {
@@ -142,53 +120,40 @@
                 showLoading(false);
             }
         }
-
         function runMRP() {
             const bomData = loadedData.bom;
             const invData = loadedData.inventory;
             const salesData = loadedData.sales;
-
             if (!bomData.length || !invData.length || !salesData.length) {
                 alert('데이터가 없습니다. 파일을 먼저 업로드하세요.');
                 window.location.href = 'upload.html';
                 return;
             }
-
-            // Build inventory map
             const inventory = {};
             invData.forEach(row => {
                 const pn = row['품번'] || row['partNumber'] || Object.values(row)[0];
                 const qty = parseFloat(row['재고수량'] || row['inventory'] || Object.values(row)[1]) || 0;
                 inventory[pn] = qty;
             });
-
-            // Build BOM map (level 1 only to prevent circular reference)
             const bomLevel1 = {};
             bomData.forEach(row => {
                 const parent = row['모품번'] || row['parentPN'] || Object.values(row)[0];
                 const child = row['자품번'] || row['childPN'] || Object.values(row)[1];
                 const level = parseInt(row['레벨'] || row['level'] || Object.values(row)[2]) || 1;
                 const qty = parseFloat(row['소요량'] || row['quantity'] || Object.values(row)[3]) || 1;
-
-                // Only process level 1 (direct children)
                 if (level === 1) {
                     if (!bomLevel1[parent]) bomLevel1[parent] = [];
                     bomLevel1[parent].push({ child, qty });
                 }
             });
-
-            // Calculate requirements (1-level only, no recursion)
             analysisResults = [];
             salesData.forEach(sale => {
                 const product = sale['품번'] || sale['partNumber'] || Object.values(sale)[0];
                 const planQty = parseFloat(sale['계획수량'] || sale['매출수량'] || sale['planQty'] || Object.values(sale)[1]) || 0;
-
-                // Get direct children only
                 const children = bomLevel1[product] || [];
                 children.forEach(item => {
                     const required = planQty * item.qty;
                     const stock = inventory[item.child] || 0;
-
                     const existing = analysisResults.find(r => r.product === product && r.material === item.child);
                     if (existing) {
                         existing.required += required;
@@ -206,20 +171,15 @@
                     }
                 });
             });
-
             displayResults();
         }
-
         function displayResults() {
             const container = document.getElementById('results');
-
             if (!analysisResults.length) {
                 container.innerHTML = '<p class="text-gray-500">분석 결과가 없습니다.</p>';
                 return;
             }
-
             const shortages = analysisResults.filter(r => r.shortage > 0);
-
             container.innerHTML = `
                 <div class="bg-white rounded-xl shadow p-6">
                     <h2 class="text-xl font-bold mb-4">📊 분석 요약</h2>
@@ -238,7 +198,6 @@
                         </div>
                     </div>
                 </div>
-
                 <div class="bg-white rounded-xl shadow p-6">
                     <h2 class="text-xl font-bold mb-4">📋 상세 분석 결과</h2>
                     <div class="overflow-x-auto">
@@ -274,13 +233,11 @@
                 </div>
             `;
         }
-
         function exportExcel() {
             if (!analysisResults.length) {
                 alert('먼저 MRP 분석을 실행하세요.');
                 return;
             }
-
             const ws = XLSX.utils.json_to_sheet(analysisResults);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, 'MRP분석결과');
